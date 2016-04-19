@@ -107,28 +107,25 @@ class TableQuery:
         return s + '\n'.join(delimiter.join(map(str, line)) for line in self._data)
 
     def query(self, query=None, get=None, **query_dict):
-        """ How to use query:
-            simple usage: obj.query(query={'winner': 'bob', 'year': lambda v: 1985 < v < 2000}, get=0)
+        """ query: a function, optional
+            get: the indexes or indices to return of the final result, integer or tuple of integers
+            query_dict: keywargs passed in, must be column names,
+                        and must be a value or function that takes
+                        the column value as a parameter
+
+            How to use query:
+            simple usage: obj.query(query=lambda row: 1980 < row.year < 2000 and row.home_team in ['Bears', '49ers'], get=0)
                           obj.query(winner='bob', year=lambda v: 1985 < v < 2000, get=(0,3))
                 get is always optional
-
-            Other usage is unhandled and may or may not work as expected.  You have been warned.
         """
-        # returns rows where query dictionary of "column_num": "value" is true
-        # value can also be a function, for filtering, i.e.
-        # "column_2": lambda val: 3 <= val <= 8
+        filtered = self._data.copy()
         if query:
-            filtered = list(filter(query, self._data))
-        else:
-            filterable = self._data.copy()
+            filtered = list(filter(query, filtered))
+        if query_dict:
             indexed_queries = sorted([(self.indices[k], v) for k,v in query_dict.items()])
-            if query_dict:
-                query_indices, queries = list(zip(*indexed_queries))
-                filtered = [line for line in self.data if all(call_equal(obj, comparison) \
-                    for (obj, comparison) in zip(tuple_wrap(itemgetter(*query_indices)(line)), queries))]
-            else:
-                query_indices, queries = ([],[])
-                filtered = filterable
+            query_indices, queries = list(zip(*indexed_queries))
+            filtered = [line for line in self.data if all(call_equal(obj, comparison) \
+                for (obj, comparison) in zip(tuple_wrap(itemgetter(*query_indices)(line)), queries))]
 
         if get == None:
             return self.__class__(data=filtered, column_names=self.column_names)
@@ -168,9 +165,3 @@ class TableQuery:
             return ['column_{}'.format(n) for n in range(1, num + 1)]
         else:
             return column_names
-
-
-if __name__ == '__main__':
-    table = TableQuery(filename='nfl_1978.csv', header=True)
-    print('results')
-    print(table.query(lambda row: len(set([row.home_team, row.visiting_team]) & set(['49ers', 'Buccaneers', 'Broncos', 'Bengals', 'Chargers', 'Falcons', 'Packers'])) == 2))
