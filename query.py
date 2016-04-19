@@ -20,6 +20,11 @@ def tuple_wrap(obj):
     return obj
 
 
+class Row:
+    def __init__(self, column_names, values):
+        for column_name, value in zip(column_names, values):
+            setattr(self, column_name, value)
+
 class TableQuery:
     """
     sample query:
@@ -50,6 +55,8 @@ class TableQuery:
             else:
                 self.column_names = column_names
 
+        self.indices = {v:k for k,v in dict(enumerate(self.column_names)).items()}
+
     @property
     def data(self):
         return self._data
@@ -60,7 +67,7 @@ class TableQuery:
             s += delimiter.join(self.column_names) + '\n'
         return s + '\n'.join(delimiter.join(map(str, line)) for line in self.data)
 
-    def query(self, query=None, get=None, **query_dict):
+    def query(self, query=None, get=None, _or=None, **query_dict):
         """ How to use query:
             simple usage: obj.query(query={'winner': 'bob', 'year': lambda v: 1985 < v < 2000}, get=0)
                           obj.query(winner='bob', year=lambda v: 1985 < v < 2000, get=(0,3))
@@ -73,14 +80,28 @@ class TableQuery:
         # "column_2": lambda val: 3 <= val <= 8
         if query == None:
             query = query_dict
+        
         filterable = self.data.copy()
         indexed_queries = sorted([(self.column_names.index(k), v) for k,v in query.items()])
-        #grouped_queries = [(i, list(zip(*list(g)))[1]) for i,g in groupby(query_to_indexed, key=itemgetter(0))]
-        query_indices, queries = list(zip(*indexed_queries))
-
-        filtered = [line for line in self.data if all(call_equal(obj, comparison) \
-            for (obj, comparison) in zip(tuple_wrap(itemgetter(*query_indices)(line)), queries))]
+        if query:
+            query_indices, queries = list(zip(*indexed_queries))
+            filtered = [line for line in self.data if all(call_equal(obj, comparison) \
+                for (obj, comparison) in zip(tuple_wrap(itemgetter(*query_indices)(line)), queries))]
+        else:
+            query_indices, queries = ([],[])
+            filtered = filterable
         #filtered = filter(lambda line: all(map(call_equal, itemgetter(*query_indices)(line), queries)), self.data)
+        if _or:
+            new_filtered = []
+            for line in filtered:
+                for k,v in _or.items():
+                    indices = sorted([self.indices[key] for key in k])
+                    if v in itemgetter(*indices)(line):
+                        new_filtered.append(line)
+                        break
+
+            filtered = new_filtered
+
         if get == None:
             return self.__class__(data=filtered, column_names=self.column_names)
         elif isinstance(get, Number):
@@ -144,3 +165,6 @@ if __name__ == '__main__':
     print('\nweek 5 first game\'s home team', week5)
     print('Games with home team Bears where visiting team was same team as the home team in the first game of week 5:')
     print((table.query(home_team=week5) + table.query(visiting_team=week5)).sort(keys=['week']).query(home_team='Giants'))
+
+    # _or keywarg allows for filtering based on at least one value in a row is equal to the _or's dict value for any column in the key tuple
+    print(table.query(_or={('visiting_team', 'home_team'):week5}).sort(keys=['week']).query(home_team='Giants'))
