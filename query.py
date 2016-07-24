@@ -4,6 +4,8 @@ from operator import itemgetter
 from numbers import Number
 from collections import OrderedDict
 
+__all__ = ['TableQuery']
+
 def eval_or_str(s):
     try:
         return literal_eval(s)
